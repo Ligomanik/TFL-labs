@@ -1,0 +1,205 @@
+$ENTRY Go {
+  = <Compile 0 <ReadRules <Card>>>;
+}
+
+ReadRules {
+  0 =;
+  e.Line 0 = <Parse <Trim e.Line>>;
+  e.Line = <Parse <Trim e.Line>> <ReadRules <Card>>;
+}
+
+Trim {
+  ' ' e.Text = <Trim e.Text>;
+  '\t' e.Text = <Trim e.Text>;
+  e.Text ' ' = <Trim e.Text>;
+  e.Text '\t' = <Trim e.Text>;
+  e.Text '\r' = <Trim e.Text>;
+  e.Text = e.Text;
+}
+
+Parse {
+  =;
+  e.Left '=' e.Right,
+    <Trim e.Left> : '^' e.Pattern '$',
+    <Trim e.Right> : '^' e.Result '$',
+    <Variables () e.Pattern> : e.Variables,
+    <ValidateRight (e.Variables) e.Result> : Valid
+    = <Simplify (e.Pattern) (e.Result)>;
+  e.Invalid = <Invalid>;
+}
+
+Alphabet {
+  = 'abcdefghijklmnopqrstuvwxyz';
+}
+
+Variables {
+  (e.Seen) = e.Seen;
+  (e.Seen) s.Char e.Rest,
+    <Alphabet> : e.Before s.Char e.After
+    = <Variables (e.Seen) e.Rest>;
+  (e.Seen) s.Char e.Rest,
+    e.Seen : e.Before s.Char e.After
+    = <Invalid>;
+  (e.Seen) s.Char e.Rest,
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ' : e.Before s.Char e.After
+    = <Variables (e.Seen s.Char) e.Rest>;
+  e.Invalid = <Invalid>;
+}
+
+ValidateRight {
+  (e.Available) = Valid;
+  (e.Available) s.Char e.Rest,
+    <Alphabet> : e.Before s.Char e.After
+    = <ValidateRight (e.Available) e.Rest>;
+  (e.Before s.Char e.After) s.Char e.Rest
+    = <ValidateRight (e.After) e.Rest>;
+  e.Invalid = <Invalid>;
+}
+
+Invalid {
+  = <Prout 'ERROR: distinct variables, same order, ^pattern$ = ^pattern$'>
+      <Exit 1>;
+}
+
+Simplify {
+  (e.Before s.First s.Second e.After) (e.Right),
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ' : e.B s.First e.E,
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ' : e.B2 s.Second e.E2
+    = <Simplify (e.Before s.Second e.After) (<Without s.First e.Right>)>;
+  (e.Left) (e.Right) = ((e.Left) (e.Right));
+}
+
+Without {
+  s.Variable e.Before s.Variable e.After = e.Before e.After;
+  s.Variable e.Pattern = e.Pattern;
+}
+
+Parts {
+  e.Text s.Variable e.Rest,
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ' : e.Before s.Variable e.After
+    = (e.Text) s.Variable <Parts e.Rest>;
+  e.Text = (e.Text);
+}
+
+Name {
+  s.Rule s.Index s.Kind = '@' s.Kind <Symb s.Rule> ':' <Symb s.Index> ';';
+}
+
+Rule {
+  (e.Left) (e.Right) = <Prout e.Left ' -> ' e.Right>;
+}
+
+Compile {
+  s.Rule =;
+  s.Rule ((e.Left) (e.Right)) e.Rest,
+    <Parts e.Left> : e.LeftParts
+    = <Start s.Rule>
+      <Scans s.Rule 0 Match e.LeftParts>
+      <Moves Keep (<Name s.Rule 0 'F'>) <Alphabet>>
+      <Rule ('!' <Name s.Rule 0 'F'>)
+        ('!' <Name <Add s.Rule 1> 0 'S'>)>
+      <Rule ('!' <Name s.Rule 0 'R'>) ('^')>
+      <Rewrite s.Rule 1 (<Name s.Rule 0 'R'>)
+        <Actions s.Rule 0 ('!') (e.LeftParts) (<Parts e.Right>)>>
+      <Compile <Add s.Rule 1> e.Rest>;
+}
+
+Start {
+  0 = <Rule ('^') ('!' <Name 0 0 'S'>)>;
+  s.Rule =;
+}
+
+Scans {
+  s.Rule s.Index s.Mode (e.Text)
+    = <Scan s.Mode (<Name s.Rule s.Index 'S'>) (<Name s.Rule 0 'F'>)
+        (<Name s.Rule s.Index 'M'>) (<Name s.Rule 0 'D'>) (e.Text) ('$')>;
+  s.Rule s.Index s.Mode (e.Text) s.Variable e.Rest
+    = <Rule (<Name s.Rule s.Index 'M'> <Name s.Rule 0 'F'>)
+        (<Name s.Rule 0 'F'>)>
+      <Scan s.Mode (<Name s.Rule s.Index 'S'>) (<Name s.Rule 0 'F'>)
+        (<Name s.Rule s.Index 'M'>)
+        (<Name s.Rule <Add s.Index 1> 'S'>) (e.Text) ()>
+      <Scans s.Rule <Add s.Index 1> Search e.Rest>;
+}
+
+Scan {
+  s.Mode (e.Cursor) (e.Fail) (e.Mark) (e.Next) (e.Text) (e.End)
+    = <Rule (e.Cursor e.Text e.End) (e.Text e.Mark e.Next e.End)>
+      <Mismatches s.Mode (e.Cursor) (e.Fail) () (e.Text) (e.End)>;
+}
+
+Mismatches {
+  s.Mode (e.Cursor) (e.Fail) (e.Prefix) () () =;
+  s.Mode (e.Cursor) (e.Fail) (e.Prefix) () ('$')
+    = <Alternatives s.Mode (e.Cursor) (e.Fail) (e.Prefix) () <Alphabet>>;
+  s.Mode (e.Cursor) (e.Fail) (e.Prefix) (s.Char e.Rest) (e.End)
+    = <Alternatives s.Mode (e.Cursor) (e.Fail) (e.Prefix)
+        (s.Char) <Alphabet>>
+      <Mismatch s.Mode (e.Cursor) (e.Fail) e.Prefix '$'>
+      <Mismatches s.Mode (e.Cursor) (e.Fail)
+        (e.Prefix s.Char) (e.Rest) (e.End)>;
+}
+
+Alternatives {
+  s.Mode (e.Cursor) (e.Fail) (e.Prefix) (e.Except) =;
+  s.Mode (e.Cursor) (e.Fail) (e.Prefix) (s.Char) s.Char e.Rest
+    = <Alternatives s.Mode (e.Cursor) (e.Fail) (e.Prefix) (s.Char) e.Rest>;
+  s.Mode (e.Cursor) (e.Fail) (e.Prefix) (e.Except) s.Char e.Rest
+    = <Mismatch s.Mode (e.Cursor) (e.Fail) e.Prefix s.Char>
+      <Alternatives s.Mode (e.Cursor) (e.Fail) (e.Prefix) (e.Except) e.Rest>;
+}
+
+Mismatch {
+  Search (e.Cursor) (e.Fail) s.First e.Rest,
+    <Alphabet> : e.Before s.First e.After
+    = <Rule (e.Cursor s.First e.Rest) (s.First e.Cursor e.Rest)>;
+  s.Mode (e.Cursor) (e.Fail) e.Text
+    = <Rule (e.Cursor e.Text) (e.Fail e.Text)>;
+}
+
+Actions {
+  s.Rule s.Block (e.Boundary) () () =;
+  s.Rule s.Block (e.Boundary) (e.Left) (() e.Right)
+    = <Actions s.Rule s.Block (e.Boundary) (e.Left) (e.Right)>;
+  s.Rule s.Block (e.Boundary) (e.Left) ((e.Text) e.Right)
+    = (Insert e.Text)
+      <Actions s.Rule s.Block (e.Boundary) (e.Left) (e.Right)>;
+  s.Rule s.Block (e.Boundary) ((e.Text) e.Left) (e.Right)
+    = (Delete (e.Text) (<Name s.Rule s.Block 'M'>))
+      <Actions s.Rule <Add s.Block 1> (<Name s.Rule s.Block 'M'>)
+        (e.Left) (e.Right)>;
+  s.Rule s.Block (e.Boundary) (s.Variable e.Left) (s.Variable e.Right)
+    = (Keep e.Boundary)
+      <Actions s.Rule s.Block (e.Boundary) (e.Left) (e.Right)>;
+  s.Rule s.Block (e.Boundary) (s.Variable e.Left) (e.Right)
+    = (Drop e.Boundary)
+      <Actions s.Rule s.Block (e.Boundary) (e.Left) (e.Right)>;
+}
+
+Rewrite {
+  s.Rule s.Index (e.Previous)
+    = <Rule (<Name s.Rule 0 'D'>) (e.Previous)>;
+  s.Rule s.Index (e.Previous) t.Action e.Rest
+    = <Action (<Name s.Rule s.Index 'R'>) (e.Previous) t.Action>
+      <Rewrite s.Rule <Add s.Index 1> (<Name s.Rule s.Index 'R'>) e.Rest>;
+}
+
+Action {
+  (e.Cursor) (e.Next) (Insert e.Text)
+    = <Rule (e.Cursor) (e.Next e.Text)>;
+  (e.Cursor) (e.Next) (Delete (e.Text) (e.Mark))
+    = <Rule (e.Text e.Mark e.Cursor) (e.Next)>;
+  (e.Cursor) (e.Next) (s.Mode e.Boundary)
+    = <Moves s.Mode (e.Cursor) <Alphabet>>
+      <Rule (e.Boundary e.Cursor) (e.Boundary e.Next)>;
+}
+
+Moves {
+  s.Mode (e.Cursor) =;
+  Keep (e.Cursor) s.Char e.Rest
+    = <Rule (s.Char e.Cursor) (e.Cursor s.Char)>
+      <Moves Keep (e.Cursor) e.Rest>;
+  Drop (e.Cursor) s.Char e.Rest
+    = <Rule (s.Char e.Cursor) (e.Cursor)>
+      <Moves Drop (e.Cursor) e.Rest>;
+}
